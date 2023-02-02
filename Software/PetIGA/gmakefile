@@ -1,0 +1,119 @@
+# -*- mode: makefile-gmake -*-
+
+PETIGA_DIR ?= $(CURDIR)
+include ./lib/petiga/conf/variables
+-include makefile.in
+
+OBJDIR := $(PETIGA_ARCH)/obj
+MODDIR := $(PETIGA_ARCH)/include
+LIBDIR := $(abspath $(PETIGA_ARCH)/lib)
+
+libpetiga_shared := $(LIBDIR)/libpetiga.$(SL_LINKER_SUFFIX)
+libpetiga_static := $(LIBDIR)/libpetiga.$(AR_LIB_SUFFIX)
+libpetiga := $(if $(filter-out no,$(BUILDSHAREDLIB)),$(libpetiga_shared),$(libpetiga_static))
+
+pkgs := petiga
+srcs-petiga.c   := $(wildcard src/*.c)
+srcs-petiga.cxx := $(wildcard src/*.cxx)
+srcs-petiga.F90 := $(wildcard src/*.F90)
+
+all : $(libpetiga)
+
+.SECONDEXPANSION: # to expand $$(@D)/.DIR
+
+# check missing Fortran compiler
+ifeq ($(FC),)
+$(info GNU Make build requires PETSc with Fortran support)
+$(info Try using CMake build with 'make all-cmake')
+$(error '')
+endif
+
+# workaround old Cygwin versions
+ifeq ($(PETSC_CYGWIN_BROKEN_PIPE),1)
+ifeq ($(shell basename $(AR)),ar)
+  V ?= 1
+endif
+endif
+ifeq ($(V),)           # Print help and short compile line
+  quiet_HELP := "Use \"$(MAKE) V=1\" to see the verbose compile lines.\n"
+  quiet = @printf $(quiet_HELP)$(eval quiet_HELP:=)"  %10s %s\n" "$1$2" "$@"; $($1)
+else ifeq ($(V),0)     # Same as previous, but do not print any help
+  quiet = @printf "  %10s %s\n" "$1$2" "$@"; $($1)
+else                   # Show the full command line
+  quiet = $($1)
+endif
+
+pcc = $(if $(findstring CONLY,$(PETSC_LANGUAGE)),CC,CXX)
+COMPILE.cc = $(call quiet,$(pcc)) $(PCC_FLAGS) $(CFLAGS) $(CCPPFLAGS) $(C_DEPFLAGS) -c
+COMPILE.cxx = $(call quiet,CXX) $(CXX_FLAGS) $(CFLAGS) $(CCPPFLAGS) $(CXX_DEPFLAGS) -c
+ifneq ($(FC_MODULE_OUTPUT_FLAG),)
+COMPILE.fc = $(call quiet,FC) $(FC_FLAGS) $(FFLAGS) $(FCPPFLAGS) $(FC_DEPFLAGS) $(FC_MODULE_OUTPUT_FLAG)$(MODDIR) -c
+else
+FCMOD = cd $(MODDIR) && $(FC)
+COMPILE.fc = $(call quiet,FCMOD) $(FC_FLAGS) $(FFLAGS) $(FCPPFLAGS) $(FC_DEPFLAGS) -c
+endif
+
+langs := c cxx F90
+concatlangs = $(foreach lang, $(langs), $(srcs-$(1).$(lang):%.$(lang)=$(OBJDIR)/%.o))
+srcs.o := $(foreach pkg, $(pkgs), $(call concatlangs,$(pkg)))
+.SECONDARY: $(srcs.o)
+
+$(libpetiga_shared) : objs := $(srcs.o)
+$(libpetiga_shared) : libs := $(PETSC_LIB)
+$(libpetiga_static) : objs := $(srcs.o)
+
+%.$(SL_LINKER_SUFFIX) : $$(objs) | $$(@D)/.DIR
+	$(call quiet,CLINKER) -shared -o $@ $^ $(libs)
+ifneq ($(DSYMUTIL),true)
+	$(call quiet,DSYMUTIL) $@
+endif
+
+%.$(AR_LIB_SUFFIX) : $$(objs) | $$(@D)/.DIR
+ifeq ($(findstring win32fe lib,$(AR)),)
+	@$(RM) $@
+	$(call quiet,AR) $(AR_FLAGS) $@ $^
+	$(call quiet,RANLIB) $@
+else
+	@$(RM) $@ $@.args
+	@cygpath -w $^ > $@.args
+	$(call quiet,AR) $(AR_FLAGS) $@ @$@.args
+	@$(RM) $@.args
+endif
+
+$(OBJDIR)/%.o : %.c | $$(@D)/.DIR
+	$(COMPILE.cc) $(abspath $<) -o $@
+
+$(OBJDIR)/%.o : %.cxx | $$(@D)/.DIR
+	$(COMPILE.cxx) $(abspath $<) -o $@
+
+$(OBJDIR)/%.o : %.F90 | $$(@D)/.DIR $(MODDIR)/.DIR
+	$(COMPILE.fc) $(abspath $<) -o $(if $(FCMOD),$(abspath $@),$@)
+
+# Hack: manual dependencies on object files
+petiga.mod.o:= $(OBJDIR)/src/petigaftn.o
+srcs-petiga.F90.o = $(srcs-petiga.F90:%.F90=$(OBJDIR)/%.o)
+$(filter-out $(petiga.mod.o),$(srcs-petiga.F90.o)): | $(petiga.mod.o)
+
+%/.DIR :
+	@$(MKDIR) $(@D)
+	@touch $@
+
+.PRECIOUS: %/.DIR
+.SUFFIXES: # Clear .SUFFIXES because we don't use implicit rules
+.DELETE_ON_ERROR: # Delete likely-corrupt target file if rule fails
+.PHONY: all clean print print-%
+
+clean:
+	@$(RM) -r $(OBJDIR) $(LIBDIR)/libpetiga.* $(MODDIR)/petiga.mod
+
+# make print VAR=the-variable
+print : ; @echo $($(VAR))
+# make print-VARIABLE
+print-% : ; @echo $* = $($*)
+
+allobj.d := $(srcs.o:%.o=%.d)
+# Tell make that allobj.d are all up to date. Without
+# this, the include below has quadratic complexity.
+$(allobj.d) : ;
+
+-include $(allobj.d)

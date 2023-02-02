@@ -1,0 +1,14 @@
+# -*- mode: makefile-gmake -*-
+
+MINIFAD_DIR = /home/hu450/MiniFAD
+MINIFAD_INCLUDE = -I$(MINIFAD_DIR)
+AD_INCLUDE = -DMINIFAD $(MINIFAD_INCLUDE)
+
+.PHONY: bootstrap
+bootstrap: $(MINIFAD_DIR)/minifad.hpp
+
+MINIFAD_URL = https://raw.githubusercontent.com/dalcinl/MiniFAD/master/minifad.hpp
+$(MINIFAD_DIR)/minifad.hpp: $(MINIFAD_DIR)
+	@curl -s $(MINIFAD_URL) > $@
+$(MINIFAD_DIR):
+	@mkdir $@

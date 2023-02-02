@@ -1,0 +1,58 @@
+#Problem Setup related
+-Case 3
+-BCType 8
+-u_BC 0.01145,0.0,0.0
+-ICScale_l 1.0008572128496442
+-iga_load Mesh/GeometryCylinder.dat
+
+#Physical Parameter
+-Re 2.54e+6
+-Pe INFINITY
+-Ca 1.2e-7
+-F 1e+7
+-Theta 0.4624 #300K
+-ICScale 1.0
+
+#SpongeZone Related
+-Sponge 1
+-SpongeCoef 100.0
+-SpongeZone 18,18,0,0
+
+#Model Formulation
+-SUPG 3
+-DC 2
+-TIM 2
+-NSK_Mod 2
+
+#TS and print file options
+-ts_adapt_monitor 
+-ts_dt 1e-2
+-PrintTimeInterval 5
+-ts_max_time 1e+4
+-ts_alpha_radius 1.0
+#-ts_alpha_alpha_m 1 
+#-ts_alpha_alpha_f 1
+#-ts_alpha_gamma 1
+
+#KSP options
+-pc_type asm 
+-sub_pc_type lu
+#-mat_increase_overlap_scalable
+-ksp_rtol 1e-3
+-ksp_max_it 500 
+-ksp_gmres_restart 300 
+-ksp_converged_reason
+#-sub_pc_type lu, ilu, sor
+#-ksp_type preonly -pc_type lu -pc_factor_mat_solver_type mumps
+
+#Miscellaneous
+-iga_view 
+-log_view
+#-iga_collocation 1
+#-iga_rule_type lobatto
+
+#SNES options
+-snes_rtol 2.5e-4
+-snes_atol 1e-10
+-snes_max_it 5
+-snes_convged_reason 
